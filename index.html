@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FCC Calculator — Formula Logic</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --panel:#0b1220;
+      --accent:#06b6d4;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.04);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+      background: linear-gradient(180deg,#071023 0%, #08172a 100%);
+      color: #e6eef6;
+      display:flex; align-items:center; justify-content:center; height:100vh;
+    }
+    .calculator{
+      width:360px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:16px; padding:18px;
+      box-shadow: 0 10px 40px rgba(2,6,23,0.7);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    .display{
+      border-radius:10px; padding:14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      display:flex; flex-direction:column; justify-content:center; align-items:flex-end;
+      margin-bottom:12px;
+      color:#f8fafc;
+      position:relative;
+      min-height:90px;
+    }
+    .formula{
+      width:100%;
+      text-align:right;
+      color:var(--muted);
+      font-size:14px;
+      min-height:18px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    #display{
+      width:100%;
+      text-align:right;
+      font-size:28px; font-weight:600;
+      padding-top:6px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .keys{
+      display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;
+    }
+    button.key{
+      background:var(--glass); border:0; padding:18px; border-radius:10px; font-size:18px; color:inherit;
+      cursor:pointer; outline:none;
+      box-shadow: 0 3px 8px rgba(2,6,23,0.5), inset 0 -2px rgba(255,255,255,0.02);
+      transition: transform .08s ease, box-shadow .08s ease;
+    }
+    button.key:active{ transform: translateY(2px); }
+    button.operator{
+      background: linear-gradient(180deg, rgba(6,182,212,0.12), rgba(6,182,212,0.08)); color:var(--accent); font-weight:700;
+    }
+    button.equals{
+      grid-column: 4 / 5; grid-row: 3 / 6;
+      background: linear-gradient(180deg,#06b6d4,#0287a0); color:#021725; font-weight:800; font-size:20px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    button.zero{
+      grid-column: 1 / 3;
+    }
+    .small-note{margin-top:10px; font-size:12px; color:var(--muted); text-align:center;}
+    @media (max-width:420px){
+      .calculator{width:94vw}
+      .display{height:80px}
+    }
+  </style>
+</head>
+<body>
+  <div class="calculator" aria-label="Calculator">
+    <div class="display">
+      <div class="formula" id="formula"> </div>
+      <div id="display">0</div>
+    </div>
+
+    <div class="keys" id="keys">
+      <!-- Row 1 -->
+      <button class="key" id="clear">AC</button>
+      <button class="key operator" id="divide">/</button>
+      <button class="key operator" id="multiply">*</button>
+      <button class="key operator" id="subtract">-</button>
+
+      <!-- Row 2 -->
+      <button class="key" id="seven">7</button>
+      <button class="key" id="eight">8</button>
+      <button class="key" id="nine">9</button>
+      <button class="key operator" id="add">+</button>
+
+      <!-- Row 3 -->
+      <button class="key" id="four">4</button>
+      <button class="key" id="five">5</button>
+      <button class="key" id="six">6</button>
+      <button class="key equals" id="equals">=</button>
+
+      <!-- Row 4 -->
+      <button class="key" id="one">1</button>
+      <button class="key" id="two">2</button>
+      <button class="key" id="three">3</button>
+
+      <!-- Row 5 -->
+      <button class="key zero" id="zero">0</button>
+      <button class="key" id="decimal">.</button>
+      <!-- equals consumes col 4 rows 3-5 -->
+    </div>
+
+    <div class="small-note">Shows full input on top and result below.</div>
+  </div>
+
+  <script>
+    (function(){
+      const displayEl = document.getElementById('display');
+      const formulaEl = document.getElementById('formula');
+      const clearBtn = document.getElementById('clear');
+      const equalsBtn = document.getElementById('equals');
+      const decimalBtn = document.getElementById('decimal');
+      const numIds = ['zero','one','two','three','four','five','six','seven','eight','nine'];
+      const nums = numIds.map(id => document.getElementById(id));
+      const opMap = {add: '+', subtract: '-', multiply: '*', divide: '/'};
+      const opButtons = Object.keys(opMap).reduce((acc,k)=>{ acc[k] = document.getElementById(k); return acc; }, {});
+
+      let currentInput = '';
+      let tokens = [];
+      let lastResult = null;
+      let lastAction = null;
+
+      function updateDisplay(){
+        formulaEl.textContent = tokens.join(' ');
+        displayEl.textContent = currentInput || (lastAction==='equals'? lastResult ?? '0' : '0');
+      }
+      function resetAll(){
+        currentInput='';tokens=[];lastResult=null;lastAction='clear';formulaEl.textContent='';displayEl.textContent='0';
+      }
+      function trimNumberString(n){const r=Number(Number(n).toFixed(10));return (r%1===0)?String(r):String(r);}
+      function isOperator(t){return ['+','-','*','/'].includes(t);}
+      function onDigit(d){
+        if(lastAction==='equals'){tokens=[];lastResult=null;currentInput=d==='0'?'0':d;}
+        else{
+          if(currentInput==='0'&&d==='0')return;
+          if(currentInput==='0'&&d!=='0'&&!currentInput.includes('.'))currentInput=d;
+          else currentInput+=d;
+        }
+        lastAction='digit';updateDisplay();
+      }
+      function onDecimal(){
+        if(lastAction==='equals'){tokens=[];lastResult=null;currentInput='0.';lastAction='digit';updateDisplay();return;}
+        if(!currentInput) currentInput='0.'; 
+        else if(!currentInput.includes('.')) currentInput+='.';
+        lastAction='digit';updateDisplay();
+      }
+      function onOperator(op){
+        if(lastAction==='operator'){
+          if(op==='-' && !currentInput){currentInput='-';lastAction='digit';updateDisplay();return;}
+          if(!currentInput && tokens.length && isOperator(tokens.at(-1))){tokens[tokens.length-1]=op;updateDisplay();return;}
+        }
+        if(lastAction==='equals'&&lastResult!==null){tokens=[String(lastResult)];}
+        if(currentInput && currentInput!=='-'){tokens.push(currentInput);currentInput='';}
+        else if(currentInput==='-'){currentInput='';}
+        if(tokens.length && isOperator(tokens.at(-1))) tokens[tokens.length-1]=op; else tokens.push(op);
+        lastAction='operator';updateDisplay();
+      }
+      function evaluateTokens(arr){
+        const prec={'+':1,'-':1,'*':2,'/':2},out=[],ops=[];
+        for(const t of arr){
+          if(isOperator(t)){
+            while(ops.length&&isOperator(ops.at(-1))&&prec[ops.at(-1)]>=prec[t]) out.push(ops.pop());
+            ops.push(t);
+          }else out.push(t);
+        }
+        while(ops.length) out.push(ops.pop());
+        const st=[];
+        for(const t of out){
+          if(isOperator(t)){
+            const b=+st.pop(),a=+st.pop();
+            st.push(t==='+'?a+b:t==='-'?a-b:t==='*'?a*b:a/b);
+          }else st.push(+t);
+        }
+        return st[0]??0;
+      }
+      function onEquals(){
+        if(currentInput&&currentInput!=='-'){tokens.push(currentInput);currentInput='';}
+        while(tokens.length&&isOperator(tokens.at(-1)))tokens.pop();
+        if(!tokens.length&&lastResult!=null){displayEl.textContent=trimNumberString(lastResult);lastAction='equals';return;}
+        let res=0;try{res=evaluateTokens(tokens);}catch{res=NaN;}
+        lastResult=trimNumberString(res);tokens=[];currentInput='';lastAction='equals';
+        formulaEl.textContent='';displayEl.textContent=lastResult;
+      }
+
+      nums.forEach((btn,i)=>btn.addEventListener('click',()=>onDigit(String(i))));
+      decimalBtn.addEventListener('click',onDecimal);
+      Object.entries(opButtons).forEach(([k,b])=>b.addEventListener('click',()=>onOperator(opMap[k])));
+      clearBtn.addEventListener('click',resetAll);
+      equalsBtn.addEventListener('click',onEquals);
+      window.addEventListener('keydown',e=>{
+        if(/[0-9]/.test(e.key))onDigit(e.key);
+        else if(e.key==='.')onDecimal();
+        else if(['+','-','*','/'].includes(e.key))onOperator(e.key);
+        else if(e.key==='Enter'||e.key==='='){e.preventDefault();onEquals();}
+        else if(e.key==='Escape')resetAll();
+      });
+      resetAll();
+    })();
+  </script>
+
+  <script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+</body>
+</html>
